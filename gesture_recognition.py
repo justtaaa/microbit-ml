@@ -2,15 +2,23 @@ from microbit import *
 import random
 
 # Function to collect data for a specific gesture
-def collect_data(label):
+def collect_data(label, num_samples=100):
     data = []
+    
+    # Countdown to give the user time to prepare
+    for i in range(3, 0, -1):
+        display.scroll(str(i))
+        sleep(1000)
+    
     display.scroll("Go")
-    for _ in range(50):  # Collect 50 samples
+    
+    for _ in range(num_samples):
         x = accelerometer.get_x()
         y = accelerometer.get_y()
         z = accelerometer.get_z()
         data.append((x, y, z, label))
-        sleep(100)
+        sleep(500)
+    
     display.scroll("Done")
     return data
 
@@ -28,12 +36,12 @@ def classify_gesture(x, y, z, datasets):
     
     return predicted_label
 
-# Function to calculate accuracy
-def calculate_accuracy(test_data, datasets):
+# Function to calculate accuracy using a validation set
+def calculate_accuracy(validation_data, datasets):
     correct_predictions = 0
-    total_predictions = len(test_data)
+    total_predictions = len(validation_data)
     
-    for sample in test_data:
+    for sample in validation_data:
         x, y, z, actual_label = sample
         predicted_label = classify_gesture(x, y, z, datasets)
         if predicted_label == actual_label:
@@ -42,33 +50,52 @@ def calculate_accuracy(test_data, datasets):
     accuracy = (correct_predictions / total_predictions) * 100
     return accuracy
 
+# Function to split data into training and validation sets
+def split_data(data, validation_ratio=0.2):
+    split_index = int(len(data) * (1 - validation_ratio))
+    training_data = data[:split_index]
+    validation_data = data[split_index:]
+    return training_data, validation_data
+
 # Initialize datasets
 datasets = []
-test_data = []
+validation_data = []
 
 # Main loop for data collection and real-time gesture recognition
 while True:
     if button_a.is_pressed():
-        datasets.append({'label': 0, 'samples': collect_data(0)})  # Collect data for Shake
+        raw_data = collect_data(0)
+        training_data, validation_data_part = split_data(raw_data)
+        datasets.append({'label': 0, 'samples': training_data})
+        validation_data.extend(validation_data_part)  # Collect data for validation
+
     if button_b.is_pressed():
-        datasets.append({'label': 1, 'samples': collect_data(1)})  # Collect data for Tilt
+        raw_data = collect_data(1)
+        training_data, validation_data_part = split_data(raw_data)
+        datasets.append({'label': 1, 'samples': training_data})
+        validation_data.extend(validation_data_part)  # Collect data for validation
+
     if pin_logo.is_touched():
-        datasets.append({'label': 2, 'samples': collect_data(2)})  # Collect data for Freefall
-    
+        raw_data = collect_data(2)
+        training_data, validation_data_part = split_data(raw_data)
+        datasets.append({'label': 2, 'samples': training_data})
+        validation_data.extend(validation_data_part)  # Collect data for validation
+
     if pin0.is_touched():
-        # Collect test data (for simplicity, using the same method)
-        test_data = collect_data(0) + collect_data(1) + collect_data(2)  # Collect test data for all gestures
-        
-        # Calculate accuracy
-        accuracy = calculate_accuracy(test_data, datasets)
-        print("Accuracy: {:.2f}%".format(accuracy))
-        
         # Print collected data to serial for inspection
         for dataset in datasets:
             label = dataset['label']
             for sample in dataset['samples']:
                 print(','.join(map(str, sample)))
-        break
+
+        # Calculate accuracy using the validation data
+        accuracy = calculate_accuracy(validation_data, datasets)
+        
+        # Display accuracy on the screen
+        display.scroll("Acc: {:.2f}%".format(accuracy))
+        
+        # Print accuracy to serial
+        print("Accuracy: {:.2f}%".format(accuracy))
 
     # Real-time gesture recognition
     x = accelerometer.get_x()
@@ -92,3 +119,4 @@ while True:
     
     sleep(1000)  # Wait for 1 second
     display.clear()
+
